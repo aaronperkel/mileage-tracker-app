@@ -16,7 +16,6 @@ npm run typecheck
 npm run build        # applies pending migrations first, then builds
 npm run db:generate  # write a migration after editing db/schema.ts
 npm run db:migrate   # on its own; the build does this too, so Vercel deploys migrate
-npm run db:seed      # idempotent, keyed on date
 npm run icons        # regenerate home-screen PNGs from the drum colours
 ```
 

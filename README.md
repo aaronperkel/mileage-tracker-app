@@ -31,7 +31,6 @@ every column so the three pastes stay lined up.
 cp .env.example .env.local   # DATABASE_URL="file:./local.db" needs no Turso account
 npm install
 npm run db:migrate
-npm run db:seed              # June, August and September 2026, from the submitted sheets
 npm run dev
 ```
 
