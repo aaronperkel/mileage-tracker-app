@@ -12,6 +12,7 @@
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
+    "db:import": "tsx scripts/import-sheets.ts",
     "db:studio": "drizzle-kit studio",
     "icons": "tsx scripts/icons.ts"
   },

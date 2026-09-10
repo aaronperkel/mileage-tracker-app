@@ -16,6 +16,7 @@ npm run typecheck
 npm run build        # applies pending migrations first, then builds
 npm run db:generate  # write a migration after editing db/schema.ts
 npm run db:migrate   # on its own; the build does this too, so Vercel deploys migrate
+npm run db:import -- <dir>   # backfill from a directory of submitted .xlsx workbooks
 npm run icons        # regenerate home-screen PNGs from the drum colours
 ```
 
@@ -62,6 +63,31 @@ looks right. `lib/sheet.test.ts` holds this.
 rounded, so rounding each day to the cent first drifts: August came out a cent over the sheet's
 $171.91 and June three cents over $125.64. But the sum still has to be per row at each row's own
 rate, because a month spanning a rate change (1 July, most recently) has two rates in it.
+
+## Importing old workbooks
+
+`scripts/import-sheets.ts` reads a directory of submitted sheets and upserts a row per logged day.
+The workbooks are never kept here — they are personal records and `*.xlsx` is gitignored — so it
+takes a path rather than shipping the readings as a committed seed.
+
+Two things it has to cope with, both real:
+
+- **A date cell Excel stored as text.** `JUL.xlsx` row 28 holds `7/31:26`, a colon typed for the
+  second slash. Column F still totalled it, so the workbook's own F33 counted a day whose date
+  column could not describe it. `fromTextDate` recovers those; anything it cannot parse is
+  reported rather than dropped.
+- **Several trips on one date.** February has four on the 19th. This app stores one row per day,
+  so `merge` bounds the day with the earliest start and the latest end. That reads *high* — Feb 19's
+  four trips total 9.4 miles and the bounded day is 11.2, because the span includes the driving
+  between them. Feb and Mar therefore exceed their submitted F33 by 11.0 and 6.0 miles; the other
+  six months match exactly. The submitted sheets remain the record of what was claimed.
+
+To point it at production, pass the Turso credentials inline — they beat `.env.local`, because
+dotenv never overrides a variable that is already set:
+
+```bash
+DATABASE_URL='libsql://…' DATABASE_AUTH_TOKEN='…' npm run db:import -- ~/sheets
+```
 
 ## Conventions
 
