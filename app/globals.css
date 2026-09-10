@@ -1,0 +1,104 @@
+@import "tailwindcss";
+
+/*
+ * Light mode only, deliberately. No dark theme, no toggle — matching
+ * ../vermont-plate-log and ../funko.
+ *
+ * Colour is spent in exactly one place: the odometer strip. Everything else is
+ * a cool off-white ground and neutral greys, so that the drums read as an
+ * instrument you are reading off a dashboard rather than as a UI accent.
+ */
+:root {
+  --ground: #f4f6f6;   /* cool off-white; explicitly not a warm cream */
+  --surface: #ffffff;  /* the field and the few raised panels */
+  --rule: #d5dadb;     /* hairlines — the only structural device */
+  --rule-strong: #b6bfc0;
+
+  --ink: #16191a;      /* neutral near-black, not a warm-tinted stand-in */
+  --ink-soft: #5c6668; /* 6.1:1 on ground — AA for small text */
+  --ink-faint: #838d8f; /* 3.2:1 — large text and disabled states only */
+
+  /*
+   * The odometer.
+   *
+   * Drums are a graphite that stays slightly warm of neutral, the way a moulded
+   * instrument bezel does under daylight — a pure grey reads as a UI chip. The
+   * digits are bone rather than paper white because a lit drum never is.
+   *
+   * The tenths drum is the one saturated value in the app. Mechanical trip
+   * meters run the tenths wheel on a contrasting drum, and this is that: a deep
+   * brick, dark enough to hold bone-white digits at 7.4:1, and kept off the
+   * terracotta that would read as decoration.
+   */
+  --drum: #23262a;
+  --drum-edge: #34383d;   /* the lit top curve of a wheel */
+  --drum-shadow: #131518; /* where it rolls out of sight */
+  --drum-ink: #f2f1ed;
+  --tenth-drum: #a8432a;
+
+  --warn: #8a5540;  /* readings worth a second look, never an error */
+  --error: #8d3535;
+}
+
+@theme inline {
+  --color-ground: var(--ground);
+  --color-surface: var(--surface);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-ink-faint: var(--ink-faint);
+
+  --color-drum: var(--drum);
+  --color-drum-edge: var(--drum-edge);
+  --color-drum-shadow: var(--drum-shadow);
+  --color-drum-ink: var(--drum-ink);
+  --color-tenth-drum: var(--tenth-drum);
+
+  --color-warn: var(--warn);
+  --color-error: var(--error);
+
+  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+  /*
+   * Exclusive to the drums. Odometer digits are tall and narrow because the
+   * wheel they are printed on is narrow; a normal-width face reads as a number
+   * in a box instead.
+   */
+  --font-drum: var(--font-barlow-condensed), ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    /* iOS enlarges text in landscape without this. */
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    /* The app is opened one-handed in a car; nothing here should rubber-band. */
+    overscroll-behavior-y: none;
+  }
+
+  /* Every figure in this app is a quantity that gets compared down a column. */
+  .tnum {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ink);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
