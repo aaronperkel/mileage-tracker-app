@@ -2,15 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ConfirmStrip } from '@/components/confirm-strip';
 import { formatDayLabel } from '@/lib/date';
 import { checkReading, formatMiles, formatOdometer, parseTenths } from '@/lib/odometer';
+import { send } from '@/lib/send';
 import type { MonthRow } from '@/lib/sheet';
 
 /*
  * The month as it will reach the sheet: one row per day, in the order the rows
- * get pasted. Tapping a day opens the two readings for correction, which is the
- * only editing this app needs — everything else is done from the field on the
- * home screen.
+ * get pasted. Tapping a day opens the two readings for correction or removal,
+ * which is the only editing this app needs — everything else is done from the
+ * field on the home screen.
  */
 
 export function MonthTable({ rows }: { rows: MonthRow[] }) {
@@ -65,6 +67,7 @@ function EditRow({ row, onDone }: { row: MonthRow; onDone: () => void }) {
   const [end, setEnd] = useState(row.endTenths == null ? '' : String(row.endTenths / 10));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<'day' | 'end' | null>(null);
 
   const startTenths = parseTenths(start);
   const endTenths = end.trim() === '' ? null : parseTenths(end);
@@ -79,15 +82,13 @@ function EditRow({ row, onDone }: { row: MonthRow; onDone: () => void }) {
     setBusy(true);
     setError(null);
 
-    const response = await fetch(`/api/trips/${row.date}`, {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ startTenths: start, endTenths: end.trim() === '' ? null : end }),
+    const failure = await send(`/api/trips/${row.date}`, 'PATCH', {
+      startTenths: start,
+      endTenths: end.trim() === '' ? null : end,
     });
 
-    if (!response.ok) {
-      const body = await response.json().catch(() => ({}));
-      setError(body.error ?? 'That did not save.');
+    if (failure) {
+      setError(failure);
       setBusy(false);
       return;
     }
@@ -95,11 +96,20 @@ function EditRow({ row, onDone }: { row: MonthRow; onDone: () => void }) {
     router.refresh();
   }
 
-  async function remove() {
-    setBusy(true);
-    await fetch(`/api/trips/${row.date}`, { method: 'DELETE' });
+  /*
+   * Two ways to take something away. The whole day, for a day off keyed in as a
+   * workday. Or just the ending reading, which reopens the day as still out —
+   * the same as emptying the field and saving, but findable.
+   */
+  async function remove(what: 'day' | 'end'): Promise<string | null> {
+    const failure =
+      what === 'day'
+        ? await send(`/api/trips/${row.date}`, 'DELETE')
+        : await send(`/api/trips/${row.date}`, 'PATCH', { endTenths: null });
+    if (failure) return failure;
     onDone();
     router.refresh();
+    return null;
   }
 
   return (
@@ -116,31 +126,67 @@ function EditRow({ row, onDone }: { row: MonthRow; onDone: () => void }) {
         </p>
       ) : null}
 
-      <div className="mt-3 flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => void save()}
-          disabled={busy || malformed || check.level === 'error'}
-          className="bg-ink px-3 py-2 text-sm font-medium text-ground disabled:bg-rule-strong"
-        >
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={onDone}
-          className="border border-rule bg-surface px-3 py-2 text-sm text-ink"
-        >
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={() => void remove()}
-          disabled={busy}
-          className="ml-auto text-sm text-ink-faint hover:text-error"
-        >
-          Delete day
-        </button>
-      </div>
+      {removing === 'day' ? (
+        <ConfirmStrip
+          className="mt-3"
+          message={
+            row.endTenths == null
+              ? `Delete ${formatDayLabel(row.date)}? Its reading of ${formatOdometer(row.startTenths)} goes with it.`
+              : `Delete ${formatDayLabel(row.date)}? Both readings go with it.`
+          }
+          confirmLabel="Delete day"
+          onConfirm={() => remove('day')}
+          onCancel={() => setRemoving(null)}
+        />
+      ) : removing === 'end' && row.endTenths != null ? (
+        <ConfirmStrip
+          className="mt-3"
+          message={`Remove the ending reading, ${formatOdometer(row.endTenths)}? The day goes back to still out.`}
+          confirmLabel="Remove"
+          onConfirm={() => remove('end')}
+          onCancel={() => setRemoving(null)}
+        />
+      ) : (
+        <>
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={busy || malformed || check.level === 'error'}
+              className="bg-ink px-3 py-2 text-sm font-medium text-ground disabled:bg-rule-strong"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={onDone}
+              className="border border-rule bg-surface px-3 py-2 text-sm text-ink"
+            >
+              Cancel
+            </button>
+          </div>
+          <div className="mt-3 flex items-center gap-4 text-sm">
+            <button
+              type="button"
+              onClick={() => setRemoving('day')}
+              disabled={busy}
+              className="text-ink-soft hover:text-error"
+            >
+              Delete day
+            </button>
+            {row.endTenths != null ? (
+              <button
+                type="button"
+                onClick={() => setRemoving('end')}
+                disabled={busy}
+                className="text-ink-soft hover:text-error"
+              >
+                Remove ending reading
+              </button>
+            ) : null}
+          </div>
+        </>
+      )}
     </div>
   );
 }

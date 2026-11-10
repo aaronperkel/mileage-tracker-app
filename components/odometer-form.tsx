@@ -2,9 +2,11 @@
 
 import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ConfirmStrip } from '@/components/confirm-strip';
 import { OdometerStrip } from '@/components/odometer-strip';
 import { checkReading, formatMiles, formatOdometer } from '@/lib/odometer';
 import { formatDayLabel } from '@/lib/date';
+import { send } from '@/lib/send';
 
 /*
  * The screen that gets used standing next to a car, one-handed, twice a day.
@@ -39,6 +41,7 @@ export function OdometerForm({ date, trip, previous }: Props) {
   const [digits, setDigits] = useState('');
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   /* Leaving is the second reading of the day; arriving is the first. */
   const leaving = trip !== null && trip.endTenths === null;
@@ -85,8 +88,33 @@ export function OdometerForm({ date, trip, previous }: Props) {
     router.refresh();
   }
 
-  if (done) return <DayDone trip={trip} onCorrect={() => router.push(`/log/${date.slice(0, 7)}`)} />;
+  /*
+   * Taking back this morning's arrival — tapped on a day off, or on the wrong
+   * number. Deleting the row puts the screen back to waiting for an arrival.
+   */
+  async function undoArrival(): Promise<string | null> {
+    const error = await send(`/api/trips/${date}`, 'DELETE');
+    if (error) return error;
+    setUndoing(false);
+    setDigits('');
+    router.refresh();
+    return null;
+  }
 
+  if (done) {
+    return (
+      <DayDone
+        trip={trip}
+        onCorrect={() => router.push(`/log/${date.slice(0, 7)}`)}
+        onUndo={async () => {
+          const error = await send(`/api/trips/${date}`, 'PATCH', { endTenths: null });
+          if (error) return error;
+          router.refresh();
+          return null;
+        }}
+      />
+    );
+  }
 
   return (
     <form
@@ -106,7 +134,7 @@ export function OdometerForm({ date, trip, previous }: Props) {
         <OdometerStrip digits={digits} />
         <input
           ref={inputRef}
-            autoFocus
+          autoFocus
           value={digits}
           onChange={(event) => setDigits(event.target.value.replace(/\D/g, '').slice(0, MAX_DIGITS))}
           inputMode="numeric"
@@ -136,6 +164,26 @@ export function OdometerForm({ date, trip, previous }: Props) {
       </button>
 
       {failure ? <p className="mt-3 text-sm text-error">{failure}</p> : null}
+
+      {leaving && trip ? (
+        undoing ? (
+          <ConfirmStrip
+            className="mt-6 w-full max-w-xs"
+            message={`Remove this morning's arrival at ${formatOdometer(trip.startTenths)}?`}
+            confirmLabel="Remove"
+            onConfirm={undoArrival}
+            onCancel={() => setUndoing(false)}
+          />
+        ) : (
+          <button
+            type="button"
+            onClick={() => setUndoing(true)}
+            className="mt-6 text-sm text-ink-soft hover:text-error"
+          >
+            Undo arrival
+          </button>
+        )
+      ) : null}
     </form>
   );
 }
@@ -181,8 +229,20 @@ function Hint({
   return <span className="text-ink-faint">Type the odometer, tenths and all</span>;
 }
 
-/* Both readings in. The day is closed; the only thing left is a correction. */
-function DayDone({ trip, onCorrect }: { trip: Trip; onCorrect: () => void }) {
+/*
+ * Both readings in. The day is closed; what is left is a correction, or taking
+ * back the ending reading — keyed in the car park before actually leaving.
+ */
+function DayDone({
+  trip,
+  onCorrect,
+  onUndo,
+}: {
+  trip: Trip;
+  onCorrect: () => void;
+  onUndo: () => Promise<string | null>;
+}) {
+  const [undoing, setUndoing] = useState(false);
   const miles = (trip.endTenths ?? 0) - trip.startTenths;
   return (
     <div className="flex flex-col items-center">
@@ -191,13 +251,32 @@ function DayDone({ trip, onCorrect }: { trip: Trip; onCorrect: () => void }) {
       <p className="mt-1 text-sm text-ink-soft tnum">
         {formatOdometer(trip.startTenths)} to {formatOdometer(trip.endTenths ?? 0)}
       </p>
-      <button
-        type="button"
-        onClick={onCorrect}
-        className="mt-6 border border-rule bg-surface px-4 py-2.5 text-sm font-medium text-ink hover:border-rule-strong"
-      >
-        Correct today
-      </button>
+      {undoing ? (
+        <ConfirmStrip
+          className="mt-6 w-full max-w-xs"
+          message={`Remove today's ending reading, ${formatOdometer(trip.endTenths ?? 0)}? The day reopens.`}
+          confirmLabel="Remove"
+          onConfirm={onUndo}
+          onCancel={() => setUndoing(false)}
+        />
+      ) : (
+        <div className="mt-6 flex items-center gap-4">
+          <button
+            type="button"
+            onClick={onCorrect}
+            className="border border-rule bg-surface px-4 py-2.5 text-sm font-medium text-ink hover:border-rule-strong"
+          >
+            Correct today
+          </button>
+          <button
+            type="button"
+            onClick={() => setUndoing(true)}
+            className="text-sm text-ink-soft hover:text-error"
+          >
+            Undo leaving
+          </button>
+        </div>
+      )}
     </div>
   );
 }
